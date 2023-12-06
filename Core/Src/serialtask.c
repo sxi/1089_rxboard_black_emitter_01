@@ -194,26 +194,28 @@ void serial_task_func(void *argument)
 	{
 
 
-		LL_USART_DisableDirectionTx(PRIMARY_USART);
+		LL_USART_EnableDirectionTx(PRIMARY_USART);
 		LL_GPIO_ResetOutputPin(PRI_EN_GPIO_Port, PRI_EN_Pin);
 		// Turning on USART may leave a junk byte in the RX buffer
+		LL_USART_EnableDirectionRx(PRIMARY_USART);
 		while(LL_USART_IsActiveFlag_RXNE(PRIMARY_USART) == 1)
 		{
 			scrap = LL_USART_ReceiveData8(PRIMARY_USART);
 		}
-		LL_USART_EnableDirectionRx(PRIMARY_USART);
+
 		LL_USART_EnableIT_RXNE(PRIMARY_USART);
 		NVIC_EnableIRQ(PRIMARY_US_IRQN);
 
 		if(NULL != SECONDARY_USART)
 		{
-			LL_USART_DisableDirectionTx(SECONDARY_USART);
+			LL_USART_EnableDirectionTx(SECONDARY_USART);
 			LL_GPIO_ResetOutputPin(SEC_EN_GPIO_Port, SEC_EN_Pin);
+			LL_USART_EnableDirectionRx(SECONDARY_USART);
 			while(LL_USART_IsActiveFlag_RXNE(PRIMARY_USART) == 1)
 			{
 				scrap = LL_USART_ReceiveData8(PRIMARY_USART);
 			}
-			LL_USART_EnableDirectionRx(SECONDARY_USART);
+
 			LL_USART_EnableIT_RXNE(SECONDARY_USART);
 			NVIC_EnableIRQ(SECONDARY_US_IRQN);
 		}
@@ -259,8 +261,6 @@ void user_secondary_usart_handler(USART_TypeDef * caller)
 		if (1 == serial_byte_count)
 		{
 			LL_USART_DisableIT_RXNE(PRIMARY_USART);
-			LL_GPIO_SetOutputPin(PRI_EN_GPIO_Port, PRI_EN_Pin);
-
 			interface = SECONDARY;
 			xTimerStartFromISR(line_silence_timerHandle,
 					&xHigherPriorityTaskWoken);
@@ -280,7 +280,6 @@ void user_primary_usart_handler(USART_TypeDef * caller)
 	if (LL_USART_IsActiveFlag_RXNE(caller) == 1)
 	{
 		LL_USART_DisableIT_RXNE(caller);
-		LL_GPIO_SetOutputPin(SEC_EN_GPIO_Port, SEC_EN_Pin);
 		serial_buffer[serial_byte_count++] = LL_USART_ReceiveData8(caller);
 		if (1 == serial_byte_count)
 		{
@@ -312,6 +311,7 @@ static void print_driver(uint16_t byte_count, uint8_t * buffer, comms_source_t c
 		LL_USART_DisableDirectionRx(PRIMARY_USART);
 		LL_USART_EnableDirectionTx(PRIMARY_USART);
 		LL_USART_ClearFlag_TC(PRIMARY_USART);
+		LL_GPIO_SetOutputPin(PRI_EN_GPIO_Port, PRI_EN_Pin);
 		active = PRIMARY_USART;
 		good2tx = true;
 	}
@@ -322,20 +322,19 @@ static void print_driver(uint16_t byte_count, uint8_t * buffer, comms_source_t c
 		LL_USART_DisableDirectionRx(SECONDARY_USART);
 		LL_USART_EnableDirectionTx(SECONDARY_USART);
 		LL_USART_ClearFlag_TC(SECONDARY_USART);
+		LL_GPIO_SetOutputPin(SEC_EN_GPIO_Port, SEC_EN_Pin);
 		active = SECONDARY_USART;
 		good2tx = true;
 	}
 
 	if(true == good2tx )
 	{
-		uint8_t clear = 0;
 		for(uint16_t i = 0 ; i < byte_count; i++)
 		{
 			LL_USART_TransmitData8(active, buffer[i]);
 			while( 0 == LL_USART_IsActiveFlag_TXE(active) ) {}
 			while( 0 == LL_USART_IsActiveFlag_TC(active) ) {}
 			LL_USART_ClearFlag_TC(active);
-			clear = LL_USART_ReceiveData8(active);
 		}
 	}
 }
